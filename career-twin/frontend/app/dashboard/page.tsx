@@ -128,21 +128,26 @@ export default function DashboardPage() {
     setCompareAnalysis(null);
     setComparePickerOpen(false);
 
-    // Use cached full analysis if available (pre-computed on roles page)
-    const cached = sessionStorage.getItem(`analysis_cache_${role.title}`);
+    // Use version-aware cache key and profile ID
+    const isV2 = activeVersion === 2;
+    const activeCacheKey = isV2
+      ? `v2_analysis_cache_${role.title}`
+      : `analysis_cache_${role.title}`;
+    const activeProfileId = isV2
+      ? (sessionStorage.getItem("v2_profile_id") ?? profileId)
+      : profileId;
+
+    const cached = sessionStorage.getItem(activeCacheKey);
     if (cached) {
       const result = JSON.parse(cached) as AnalyzeRoleFitResponse;
       setAnalysis(result);
       setSelectedRole(role.title);
-      sessionStorage.setItem("analysis_result", cached);
-      sessionStorage.setItem("selected_role", role.title);
       const actualScore = (result.match_score as { overall?: number }).overall;
       if (actualScore !== undefined) {
         setRoles(prev => {
           const updated = prev.map(r =>
             r.title === role.title ? { ...r, preview_match_score: actualScore } : r
           );
-          sessionStorage.setItem("suggested_roles", JSON.stringify(updated));
           return updated;
         });
       }
@@ -152,19 +157,16 @@ export default function DashboardPage() {
     // Fallback: live API call (custom roles or cache miss)
     setIsSwitching(true);
     try {
-      const result = await analyzeRoleFit(profileId, role.title);
+      const result = await analyzeRoleFit(activeProfileId, role.title);
       setAnalysis(result);
       setSelectedRole(role.title);
-      sessionStorage.setItem("analysis_result", JSON.stringify(result));
-      sessionStorage.setItem("selected_role", role.title);
-      sessionStorage.setItem(CACHE_KEY(role.title), JSON.stringify(result));
+      sessionStorage.setItem(activeCacheKey, JSON.stringify(result));
       const actualScore = (result.match_score as { overall?: number }).overall;
       if (actualScore !== undefined) {
         setRoles(prev => {
           const updated = prev.map(r =>
             r.title === role.title ? { ...r, preview_match_score: actualScore } : r
           );
-          sessionStorage.setItem("suggested_roles", JSON.stringify(updated));
           return updated;
         });
       }

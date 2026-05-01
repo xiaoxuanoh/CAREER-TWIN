@@ -81,11 +81,8 @@ export default function DashboardPage() {
     if (pid && parsedRoles.length > 0) {
       void (async () => {
         for (const currentRole of parsedRoles) {
-          const currentScore = currentRole.title === role
-            ? actualScore
-            : currentRole.preview_match_score;
-
-          if ((currentScore ?? 0) > 0) {
+          // Skip if we already have a full cached analysis for this role
+          if (sessionStorage.getItem(CACHE_KEY(currentRole.title))) {
             continue;
           }
 

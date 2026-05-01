@@ -439,6 +439,7 @@ export default function DashboardPage() {
           canCompare={comparableRoles.length >= 1}
           onReupload={() => { setShowReuploadModal(true); setReuploadError(null); }}
           hasV2={hasV2}
+          onShowComparison={() => setShowComparison(true)}
         />
 
         {/* Role picker (shown when picker is open) */}

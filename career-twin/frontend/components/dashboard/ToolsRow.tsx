@@ -9,6 +9,7 @@ interface ToolsRowProps {
   canCompare: boolean;
   onReupload: () => void;
   hasV2: boolean;
+  onShowComparison?: () => void;
 }
 
 export function ToolsRow({
@@ -18,6 +19,7 @@ export function ToolsRow({
   canCompare,
   onReupload,
   hasV2,
+  onShowComparison,
 }: ToolsRowProps) {
   const router = useRouter();
 
@@ -43,6 +45,14 @@ export function ToolsRow({
       >
         ← Edit CV
       </button>
+      {hasV2 && onShowComparison && (
+        <button
+          onClick={onShowComparison}
+          className="rounded-lg border border-[#c5d9c5] bg-[#e8f0e8] px-3 py-1.5 text-xs font-medium text-[#4a7a4a] transition-colors hover:border-[#b0ccb0] hover:bg-[#daeada] hover:text-[#3a6a3a]"
+        >
+          ⇄ View CV Comparison
+        </button>
+      )}
       {!hasV2 && (
         <button
           onClick={onReupload}

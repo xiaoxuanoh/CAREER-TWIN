@@ -6,7 +6,8 @@ import { LeftSidebar } from "@/components/dashboard/LeftSidebar";
 import { MainContent } from "@/components/dashboard/MainContent";
 import { RightPanel } from "@/components/dashboard/RightPanel";
 import { ToolsRow } from "@/components/dashboard/ToolsRow";
-import { analyzeRoleFit, analyzeRoleFitWithRetry } from "@/lib/api";
+import { analyzeRoleFit, analyzeRoleFitWithRetry, uploadCV, confirmProfile, suggestRoles } from "@/lib/api";
+import { ReuploadModal } from "@/components/dashboard/ReuploadModal";
 import type { AnalyzeRoleFitResponse, RoleSuggestion } from "@/lib/types";
 
 const CACHE_KEY = (title: string) => `analysis_cache_${title}`;
@@ -26,6 +27,14 @@ export default function DashboardPage() {
   const [comparePickerOpen, setComparePickerOpen] = useState(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [showReuploadModal, setShowReuploadModal] = useState(false);
+  const [reuploadLoading, setReuploadLoading] = useState(false);
+  const [reuploadLoadingMsg, setReuploadLoadingMsg] = useState("Re-analysing your CV…");
+  const [reuploadError, setReuploadError] = useState<string | null>(null);
+  const [showComparison, setShowComparison] = useState(false);
+  const [v2Roles, setV2Roles] = useState<RoleSuggestion[]>([]);
+  const [v2AnalysisMap, setV2AnalysisMap] = useState<Record<string, AnalyzeRoleFitResponse>>({});
+  const [activeVersion, setActiveVersion] = useState<1 | 2>(1);
   const [highlightedSectionId, setHighlightedSectionId] = useState<string | null>(null);
   const [highlightSequence, setHighlightSequence] = useState(0);
   const highlightTimeoutRef = useRef<number | null>(null);
@@ -242,6 +251,67 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleReupload(file: File) {
+    setReuploadError(null);
+    setReuploadLoading(true);
+
+    const MESSAGES = [
+      "Parsing your new CV…",
+      "Identifying changes…",
+      "Re-analysing roles…",
+      "Almost there…",
+    ];
+    let msgIdx = 0;
+    const msgInterval = window.setInterval(() => {
+      msgIdx = (msgIdx + 1) % MESSAGES.length;
+      setReuploadLoadingMsg(MESSAGES[msgIdx]);
+    }, 2500);
+
+    try {
+      const uploadResult = await uploadCV(file);
+      const confirmResult = await confirmProfile(uploadResult.structured);
+      const v2ProfileId = confirmResult.profile_id;
+
+      const rolesResult = await suggestRoles(v2ProfileId);
+      const newRoles = rolesResult.roles;
+
+      const analysisEntries = await Promise.all(
+        newRoles.map(async (role) => {
+          try {
+            const result = await analyzeRoleFitWithRetry(v2ProfileId, role.title, 4);
+            const score = (result.match_score as { overall?: number }).overall ?? 0;
+            return { role: { ...role, preview_match_score: score }, analysis: result };
+          } catch {
+            return { role, analysis: null };
+          }
+        })
+      );
+
+      const scoredRoles = analysisEntries.map((e) => e.role);
+      const analysisMap: Record<string, AnalyzeRoleFitResponse> = {};
+      for (const entry of analysisEntries) {
+        if (entry.analysis) {
+          analysisMap[entry.role.title] = entry.analysis;
+          sessionStorage.setItem(`v2_analysis_cache_${entry.role.title}`, JSON.stringify(entry.analysis));
+        }
+      }
+      sessionStorage.setItem("v2_profile_id", v2ProfileId);
+      sessionStorage.setItem("v2_suggested_roles", JSON.stringify(scoredRoles));
+      sessionStorage.setItem("active_cv_version", "1");
+
+      setV2Roles(scoredRoles);
+      setV2AnalysisMap(analysisMap);
+      setShowReuploadModal(false);
+      setShowComparison(true);
+    } catch (err) {
+      setReuploadError(err instanceof Error ? err.message : "Re-analysis failed. Please try again.");
+    } finally {
+      window.clearInterval(msgInterval);
+      setReuploadLoading(false);
+      setReuploadLoadingMsg("Re-analysing your CV…");
+    }
+  }
+
   if (!analysis) return (
     <div className="fixed inset-0 flex items-center justify-center bg-[var(--background)]">
       <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#c4a882] border-t-transparent" />
@@ -271,6 +341,8 @@ export default function DashboardPage() {
           isComparing={isComparing}
           isCompareLoading={isCompareLoading}
           canCompare={comparableRoles.length >= 1}
+          onReupload={() => { setShowReuploadModal(true); setReuploadError(null); }}
+          hasV2={showComparison || v2Roles.length > 0}
         />
 
         {/* Role picker (shown when picker is open) */}
@@ -377,6 +449,21 @@ export default function DashboardPage() {
         >
           <span className="text-base leading-none">{rightPanelOpen ? "›" : "‹"}</span>
         </button>
+      )}
+
+      {showReuploadModal && (
+        <ReuploadModal
+          isLoading={reuploadLoading}
+          loadingMessage={reuploadLoadingMsg}
+          error={reuploadError}
+          onUpload={handleReupload}
+          onClose={() => {
+            if (!reuploadLoading) {
+              setShowReuploadModal(false);
+              setReuploadError(null);
+            }
+          }}
+        />
       )}
     </div>
   );

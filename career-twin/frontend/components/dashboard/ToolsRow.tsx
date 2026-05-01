@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 interface ToolsRowProps {
   onCompare: () => void;
   isComparing: boolean;
@@ -13,6 +15,8 @@ export function ToolsRow({
   isCompareLoading,
   canCompare,
 }: ToolsRowProps) {
+  const router = useRouter();
+
   return (
     <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-[var(--border-soft)] bg-[rgba(252,250,246,0.94)] px-6 py-3 backdrop-blur-sm">
       <button
@@ -28,6 +32,12 @@ export function ToolsRow({
         ].join(" ")}
       >
         {isCompareLoading ? "Comparing…" : isComparing ? "Hide Compare" : "⇆ Compare"}
+      </button>
+      <button
+        onClick={() => router.push("/review")}
+        className="rounded-lg border border-[var(--border-soft)] bg-white px-3 py-1.5 text-xs font-medium text-[#5f574e] transition-colors hover:border-[#cfd9e1] hover:bg-[#f8fbfc] hover:text-[#3f5e78]"
+      >
+        ← Edit CV
       </button>
     </div>
   );

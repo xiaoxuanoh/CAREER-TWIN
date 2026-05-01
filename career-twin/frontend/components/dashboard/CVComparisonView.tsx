@@ -29,8 +29,8 @@ function computeImprovements(
   const v1StrengthSet = new Set(v1.strengths.map((s) => s.toLowerCase()));
   const newStrengths = v2.strengths.filter((s) => !v1StrengthSet.has(s.toLowerCase()));
 
-  const v1Score = v1.match_score as ScoreBreakdown;
-  const v2Score = v2.match_score as ScoreBreakdown;
+  const v1Score = v1.score_breakdown as ScoreBreakdown;
+  const v2Score = v2.score_breakdown as ScoreBreakdown;
   const scoreDeltas = (["skills", "experience", "education"] as const)
     .map((key) => ({
       label: key.charAt(0).toUpperCase() + key.slice(1),
@@ -43,12 +43,10 @@ function computeImprovements(
 
 function RoleCardList({
   roles,
-  analysisMap,
   version,
   onRoleSelect,
 }: {
   roles: RoleSuggestion[];
-  analysisMap: Record<string, AnalyzeRoleFitResponse>;
   version: 1 | 2;
   onRoleSelect: (title: string, v: 1 | 2) => void;
 }) {
@@ -116,13 +114,17 @@ export function CVComparisonView({
                 <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#5f574e]">
                   Strengths
                 </h3>
-                <ul className="space-y-1.5">
-                  {v1.strengths.map((s, i) => (
-                    <li key={i} className="rounded-lg bg-[#e9f1ea] px-3 py-1.5 text-sm text-[#5b7f63]">
-                      {s}
-                    </li>
-                  ))}
-                </ul>
+                {v1.strengths.length > 0 ? (
+                  <ul className="space-y-1.5">
+                    {v1.strengths.map((s) => (
+                      <li key={s} className="rounded-lg bg-[#e9f1ea] px-3 py-1.5 text-sm text-[#5b7f63]">
+                        {s}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-[#8c847a]">None noted.</p>
+                )}
               </div>
 
               {/* Weaknesses */}
@@ -130,13 +132,17 @@ export function CVComparisonView({
                 <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#5f574e]">
                   Weaknesses
                 </h3>
-                <ul className="space-y-1.5">
-                  {v1.weaknesses.map((w, i) => (
-                    <li key={i} className="rounded-lg bg-[#f4e5e0] px-3 py-1.5 text-sm text-[#a8655b]">
-                      {w}
-                    </li>
-                  ))}
-                </ul>
+                {v1.weaknesses.length > 0 ? (
+                  <ul className="space-y-1.5">
+                    {v1.weaknesses.map((w) => (
+                      <li key={w} className="rounded-lg bg-[#f4e5e0] px-3 py-1.5 text-sm text-[#a8655b]">
+                        {w}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-[#8c847a]">None noted.</p>
+                )}
               </div>
             </div>
           ) : (
@@ -150,7 +156,6 @@ export function CVComparisonView({
             </p>
             <RoleCardList
               roles={v1Roles}
-              analysisMap={v1AnalysisMap}
               version={1}
               onRoleSelect={onRoleSelect}
             />
@@ -170,13 +175,17 @@ export function CVComparisonView({
                 <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#5f574e]">
                   Strengths
                 </h3>
-                <ul className="space-y-1.5">
-                  {v2.strengths.map((s, i) => (
-                    <li key={i} className="rounded-lg bg-[#e9f1ea] px-3 py-1.5 text-sm text-[#5b7f63]">
-                      {s}
-                    </li>
-                  ))}
-                </ul>
+                {v2.strengths.length > 0 ? (
+                  <ul className="space-y-1.5">
+                    {v2.strengths.map((s) => (
+                      <li key={s} className="rounded-lg bg-[#e9f1ea] px-3 py-1.5 text-sm text-[#5b7f63]">
+                        {s}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-[#8c847a]">None noted.</p>
+                )}
               </div>
 
               {/* Weaknesses */}
@@ -184,13 +193,17 @@ export function CVComparisonView({
                 <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#5f574e]">
                   Weaknesses
                 </h3>
-                <ul className="space-y-1.5">
-                  {v2.weaknesses.map((w, i) => (
-                    <li key={i} className="rounded-lg bg-[#f4e5e0] px-3 py-1.5 text-sm text-[#a8655b]">
-                      {w}
-                    </li>
-                  ))}
-                </ul>
+                {v2.weaknesses.length > 0 ? (
+                  <ul className="space-y-1.5">
+                    {v2.weaknesses.map((w) => (
+                      <li key={w} className="rounded-lg bg-[#f4e5e0] px-3 py-1.5 text-sm text-[#a8655b]">
+                        {w}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-[#8c847a]">None noted.</p>
+                )}
               </div>
 
               {/* Improvements */}
@@ -221,8 +234,8 @@ export function CVComparisonView({
                       <div>
                         <p className="mb-1.5 text-xs font-medium text-[#4a7a4a]">Skills now matched:</p>
                         <div className="flex flex-wrap gap-1.5">
-                          {improvements.newSkills.map((s, i) => (
-                            <span key={i} className="rounded-full bg-[#e8f0e8] px-2.5 py-0.5 text-xs text-[#4a7a4a]">
+                          {improvements.newSkills.map((s) => (
+                            <span key={s} className="rounded-full bg-[#e8f0e8] px-2.5 py-0.5 text-xs text-[#4a7a4a]">
                               {s}
                             </span>
                           ))}
@@ -233,8 +246,8 @@ export function CVComparisonView({
                       <div>
                         <p className="mb-1.5 text-xs font-medium text-[#4a7a4a]">New strengths:</p>
                         <ul className="space-y-1">
-                          {improvements.newStrengths.map((s, i) => (
-                            <li key={i} className="text-xs text-[#5b7f63]">+ {s}</li>
+                          {improvements.newStrengths.map((s) => (
+                            <li key={s} className="text-xs text-[#5b7f63]">+ {s}</li>
                           ))}
                         </ul>
                       </div>
@@ -254,7 +267,6 @@ export function CVComparisonView({
             </p>
             <RoleCardList
               roles={v2Roles}
-              analysisMap={v2AnalysisMap}
               version={2}
               onRoleSelect={onRoleSelect}
             />

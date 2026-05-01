@@ -146,7 +146,7 @@ export function CVComparisonView({
               </div>
             </div>
           ) : (
-            <p className="text-sm text-[#8c847a]">Select a role to see analysis.</p>
+            <p className="text-sm text-[#8c847a]">Comparison not available for this role. Choose another role.</p>
           )}
 
           {/* Career paths */}
@@ -257,7 +257,7 @@ export function CVComparisonView({
               )}
             </div>
           ) : (
-            <p className="text-sm text-[#8c847a]">Select a role to see analysis.</p>
+            <p className="text-sm text-[#8c847a]">Comparison not available for this role. Choose another role.</p>
           )}
 
           {/* Career paths */}

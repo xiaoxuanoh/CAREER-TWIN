@@ -7,6 +7,9 @@ interface LeftSidebarProps {
   selectedRole: string;
   onRoleSwitch: (role: RoleSuggestion) => void;
   isSwitching: boolean;
+  hasV2?: boolean;
+  activeVersion?: 1 | 2;
+  onVersionSwitch?: (version: 1 | 2) => void;
 }
 
 export function LeftSidebar({
@@ -15,6 +18,9 @@ export function LeftSidebar({
   selectedRole,
   onRoleSwitch,
   isSwitching,
+  hasV2 = false,
+  activeVersion = 1,
+  onVersionSwitch,
 }: LeftSidebarProps) {
   const sortedRoles = [...roles].sort((a, b) => b.preview_match_score - a.preview_match_score);
 
@@ -24,6 +30,30 @@ export function LeftSidebar({
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8c847a]">Candidate</p>
         <p className="mt-1.5 truncate text-sm font-semibold text-[#2f2a24]">{candidateName || "—"}</p>
       </div>
+
+      {hasV2 && onVersionSwitch && (
+        <div>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8c847a]">
+            CV Version
+          </p>
+          <div className="flex gap-2">
+            {([1, 2] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => onVersionSwitch(v)}
+                className={[
+                  "flex-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors",
+                  activeVersion === v
+                    ? "border-[#c8b89a] bg-[#e8ddd0] text-[#4a3f35]"
+                    : "border-[var(--border-soft)] bg-[var(--surface)] text-[#5f574e] hover:bg-[#f3ede4]",
+                ].join(" ")}
+              >
+                Version {v}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div>
         <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8c847a]">

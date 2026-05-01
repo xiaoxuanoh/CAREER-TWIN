@@ -9,36 +9,30 @@ interface CVComparisonViewProps {
   v2Roles: RoleSuggestion[];
   v1AnalysisMap: Record<string, AnalyzeRoleFitResponse>;
   v2AnalysisMap: Record<string, AnalyzeRoleFitResponse>;
-  selectedRole: string;
   onRoleSelect: (roleTitle: string, version: 1 | 2) => void;
 }
 
-interface ScoreBreakdown {
-  skills?: number;
-  experience?: number;
-  education?: number;
-}
-
-function computeImprovements(
-  v1: AnalyzeRoleFitResponse,
-  v2: AnalyzeRoleFitResponse
-): { newSkills: string[]; newStrengths: string[]; scoreDeltas: { label: string; delta: number }[] } {
-  const v1Missing = new Set(v1.missing_skills.map((s) => s.toLowerCase()));
-  const newSkills = v2.matched_skills.filter((s) => v1Missing.has(s.toLowerCase()));
-
-  const v1StrengthSet = new Set(v1.strengths.map((s) => s.toLowerCase()));
-  const newStrengths = v2.strengths.filter((s) => !v1StrengthSet.has(s.toLowerCase()));
-
-  const v1Score = v1.score_breakdown as ScoreBreakdown;
-  const v2Score = v2.score_breakdown as ScoreBreakdown;
-  const scoreDeltas = (["skills", "experience", "education"] as const)
-    .map((key) => ({
-      label: key.charAt(0).toUpperCase() + key.slice(1),
-      delta: Number(v2Score[key] ?? 0) - Number(v1Score[key] ?? 0),
-    }))
-    .filter((d) => d.delta !== 0 && !isNaN(d.delta));
-
-  return { newSkills, newStrengths, scoreDeltas };
+function aggregateTopItems(
+  analysisMap: Record<string, AnalyzeRoleFitResponse>,
+  field: "matched_skills" | "missing_skills",
+  topN: number
+): string[] {
+  const counts = new Map<string, { count: number; original: string }>();
+  for (const analysis of Object.values(analysisMap)) {
+    for (const item of analysis[field]) {
+      const key = item.toLowerCase().trim();
+      const existing = counts.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        counts.set(key, { count: 1, original: item });
+      }
+    }
+  }
+  return Array.from(counts.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, topN)
+    .map((v) => v.original);
 }
 
 function RoleCardList({
@@ -83,12 +77,20 @@ export function CVComparisonView({
   v2Roles,
   v1AnalysisMap,
   v2AnalysisMap,
-  selectedRole,
   onRoleSelect,
 }: CVComparisonViewProps) {
-  const v1 = v1AnalysisMap[selectedRole];
-  const v2 = v2AnalysisMap[selectedRole];
-  const improvements = v1 && v2 ? computeImprovements(v1, v2) : null;
+  const hasV1 = Object.keys(v1AnalysisMap).length > 0;
+  const hasV2 = Object.keys(v2AnalysisMap).length > 0;
+
+  const v1Demonstrated = hasV1 ? aggregateTopItems(v1AnalysisMap, "matched_skills", 6) : [];
+  const v1Gaps = hasV1 ? aggregateTopItems(v1AnalysisMap, "missing_skills", 4) : [];
+
+  const v2Demonstrated = hasV2 ? aggregateTopItems(v2AnalysisMap, "matched_skills", 6) : [];
+  const v2Gaps = hasV2 ? aggregateTopItems(v2AnalysisMap, "missing_skills", 4) : [];
+
+  // Skills that appear in v2's matched but not in v1's matched
+  const v1DemonstratedSet = new Set(v1Demonstrated.map((s) => s.toLowerCase()));
+  const v2NewSkills = v2Demonstrated.filter((s) => !v1DemonstratedSet.has(s.toLowerCase()));
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--background)]">
@@ -107,58 +109,50 @@ export function CVComparisonView({
             Old CV — Version 1
           </p>
 
-          {v1 ? (
-            <div className="space-y-5">
-              {/* Strengths */}
-              <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4">
-                <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#5f574e]">
-                  Strengths
-                </h3>
-                {v1.strengths.length > 0 ? (
-                  <ul className="space-y-1.5">
-                    {v1.strengths.map((s) => (
-                      <li key={s} className="rounded-lg bg-[#e9f1ea] px-3 py-1.5 text-sm text-[#5b7f63]">
-                        {s}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-xs text-[#8c847a]">None noted.</p>
-                )}
-              </div>
-
-              {/* Weaknesses */}
-              <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4">
-                <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#5f574e]">
-                  Weaknesses
-                </h3>
-                {v1.weaknesses.length > 0 ? (
-                  <ul className="space-y-1.5">
-                    {v1.weaknesses.map((w) => (
-                      <li key={w} className="rounded-lg bg-[#f4e5e0] px-3 py-1.5 text-sm text-[#a8655b]">
-                        {w}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-xs text-[#8c847a]">None noted.</p>
-                )}
-              </div>
+          <div className="space-y-4">
+            {/* Skills demonstrated */}
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4">
+              <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#5f574e]">
+                What this CV demonstrates
+              </h3>
+              {v1Demonstrated.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {v1Demonstrated.map((s) => (
+                    <span key={s} className="rounded-lg bg-[#e9f1ea] px-3 py-1.5 text-sm text-[#5b7f63]">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-[#8c847a]">No analysis available.</p>
+              )}
             </div>
-          ) : (
-            <p className="text-sm text-[#8c847a]">Comparison not available for this role. Choose another role.</p>
-          )}
+
+            {/* Common gaps */}
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4">
+              <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#5f574e]">
+                Common gaps
+              </h3>
+              {v1Gaps.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {v1Gaps.map((s) => (
+                    <span key={s} className="rounded-lg bg-[#f4e5e0] px-3 py-1.5 text-sm text-[#a8655b]">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-[#8c847a]">No gaps identified.</p>
+              )}
+            </div>
+          </div>
 
           {/* Career paths */}
           <div className="mt-6">
             <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8c847a]">
               Career Paths
             </p>
-            <RoleCardList
-              roles={v1Roles}
-              version={1}
-              onRoleSelect={onRoleSelect}
-            />
+            <RoleCardList roles={v1Roles} version={1} onRoleSelect={onRoleSelect} />
           </div>
         </div>
 
@@ -168,108 +162,66 @@ export function CVComparisonView({
             New CV — Version 2
           </p>
 
-          {v2 ? (
-            <div className="space-y-5">
-              {/* Strengths */}
-              <div className="rounded-2xl border border-[#c5d9c5] bg-[var(--surface)] p-4">
-                <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#5f574e]">
-                  Strengths
-                </h3>
-                {v2.strengths.length > 0 ? (
-                  <ul className="space-y-1.5">
-                    {v2.strengths.map((s) => (
-                      <li key={s} className="rounded-lg bg-[#e9f1ea] px-3 py-1.5 text-sm text-[#5b7f63]">
-                        {s}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-xs text-[#8c847a]">None noted.</p>
-                )}
-              </div>
-
-              {/* Weaknesses */}
-              <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4">
-                <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#5f574e]">
-                  Weaknesses
-                </h3>
-                {v2.weaknesses.length > 0 ? (
-                  <ul className="space-y-1.5">
-                    {v2.weaknesses.map((w) => (
-                      <li key={w} className="rounded-lg bg-[#f4e5e0] px-3 py-1.5 text-sm text-[#a8655b]">
-                        {w}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-xs text-[#8c847a]">None noted.</p>
-                )}
-              </div>
-
-              {/* Improvements */}
-              {improvements && (improvements.newSkills.length > 0 || improvements.newStrengths.length > 0 || improvements.scoreDeltas.length > 0) && (
-                <div className="rounded-2xl border border-[#c5d9c5] bg-[#f0f7f0] p-4">
-                  <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#4a7a4a]">
-                    Improvements vs Old CV
-                  </h3>
-                  <div className="space-y-3">
-                    {improvements.scoreDeltas.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {improvements.scoreDeltas.map((d) => (
-                          <span
-                            key={d.label}
-                            className={[
-                              "rounded-full px-2.5 py-1 text-xs font-semibold",
-                              d.delta > 0
-                                ? "bg-[#e8f0e8] text-[#4a7a4a]"
-                                : "bg-[#f4e5e0] text-[#a8655b]",
-                            ].join(" ")}
-                          >
-                            {d.label} {d.delta > 0 ? `+${d.delta}` : d.delta}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {improvements.newSkills.length > 0 && (
-                      <div>
-                        <p className="mb-1.5 text-xs font-medium text-[#4a7a4a]">Skills now matched:</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {improvements.newSkills.map((s) => (
-                            <span key={s} className="rounded-full bg-[#e8f0e8] px-2.5 py-0.5 text-xs text-[#4a7a4a]">
-                              {s}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {improvements.newStrengths.length > 0 && (
-                      <div>
-                        <p className="mb-1.5 text-xs font-medium text-[#4a7a4a]">New strengths:</p>
-                        <ul className="space-y-1">
-                          {improvements.newStrengths.map((s) => (
-                            <li key={s} className="text-xs text-[#5b7f63]">+ {s}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
+          <div className="space-y-4">
+            {/* Skills demonstrated */}
+            <div className="rounded-2xl border border-[#c5d9c5] bg-[var(--surface)] p-4">
+              <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#5f574e]">
+                What this CV demonstrates
+              </h3>
+              {v2Demonstrated.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {v2Demonstrated.map((s) => (
+                    <span key={s} className="rounded-lg bg-[#e9f1ea] px-3 py-1.5 text-sm text-[#5b7f63]">
+                      {s}
+                    </span>
+                  ))}
                 </div>
+              ) : (
+                <p className="text-xs text-[#8c847a]">No analysis available.</p>
               )}
             </div>
-          ) : (
-            <p className="text-sm text-[#8c847a]">Comparison not available for this role. Choose another role.</p>
-          )}
+
+            {/* Common gaps */}
+            <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4">
+              <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#5f574e]">
+                Common gaps
+              </h3>
+              {v2Gaps.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {v2Gaps.map((s) => (
+                    <span key={s} className="rounded-lg bg-[#f4e5e0] px-3 py-1.5 text-sm text-[#a8655b]">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-[#8c847a]">No gaps identified.</p>
+              )}
+            </div>
+
+            {/* New in this version */}
+            {v2NewSkills.length > 0 && (
+              <div className="rounded-2xl border border-[#c5d9c5] bg-[#f0f7f0] p-4">
+                <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#4a7a4a]">
+                  New in this version
+                </h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {v2NewSkills.map((s) => (
+                    <span key={s} className="rounded-full bg-[#e8f0e8] px-2.5 py-1 text-xs font-medium text-[#4a7a4a]">
+                      + {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Career paths */}
           <div className="mt-6">
             <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8c847a]">
               Career Paths
             </p>
-            <RoleCardList
-              roles={v2Roles}
-              version={2}
-              onRoleSelect={onRoleSelect}
-            />
+            <RoleCardList roles={v2Roles} version={2} onRoleSelect={onRoleSelect} />
           </div>
         </div>
       </div>

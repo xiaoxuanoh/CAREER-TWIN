@@ -36,7 +36,6 @@ export default function DashboardPage() {
   const [v2Roles, setV2Roles] = useState<RoleSuggestion[]>([]);
   const [v2AnalysisMap, setV2AnalysisMap] = useState<Record<string, AnalyzeRoleFitResponse>>({});
   const [activeVersion, setActiveVersion] = useState<1 | 2>(1);
-  const [comparisonSelectedRole, setComparisonSelectedRole] = useState("");
   const [v1AnalysisMap, setV1AnalysisMap] = useState<Record<string, AnalyzeRoleFitResponse>>({});
   const [highlightedSectionId, setHighlightedSectionId] = useState<string | null>(null);
   const [highlightSequence, setHighlightSequence] = useState(0);
@@ -311,7 +310,6 @@ export default function DashboardPage() {
         }
       }
       setV1AnalysisMap(v1Map);
-      setComparisonSelectedRole(selectedRole);
 
       setShowReuploadModal(false);
       setShowComparison(true);
@@ -403,7 +401,6 @@ export default function DashboardPage() {
           v2Roles={v2Roles}
           v1AnalysisMap={v1AnalysisMap}
           v2AnalysisMap={v2AnalysisMap}
-          selectedRole={comparisonSelectedRole || selectedRole}
           onRoleSelect={handleComparisonRoleSelect}
         />
       </>

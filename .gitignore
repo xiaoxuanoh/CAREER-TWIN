@@ -34,5 +34,8 @@ ui.md
 .superpowers/
 .claude/.claude-session-log*.md
 
+# Git worktrees
+.worktrees/
+
 # ChromaDB local vector store
 career-twin/backend/chroma_db/

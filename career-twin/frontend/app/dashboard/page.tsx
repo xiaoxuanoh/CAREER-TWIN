@@ -357,24 +357,25 @@ export default function DashboardPage() {
       const v2RolesRaw = sessionStorage.getItem("v2_suggested_roles");
       if (v2RolesRaw) {
         const newRoles: RoleSuggestion[] = JSON.parse(v2RolesRaw);
-        setRoles(newRoles);
-        const firstRole = newRoles[0];
-        if (firstRole) {
-          const cached = sessionStorage.getItem(`v2_analysis_cache_${firstRole.title}`);
-          if (cached) {
-            setAnalysis(JSON.parse(cached) as AnalyzeRoleFitResponse);
-            setSelectedRole(firstRole.title);
-          }
+        // Try to match current selected role, fall back to first role
+        const targetTitle = newRoles.find((r) => r.title === selectedRole)?.title ?? newRoles[0]?.title;
+        const cached = targetTitle
+          ? sessionStorage.getItem(`v2_analysis_cache_${targetTitle}`)
+          : null;
+        if (cached && targetTitle) {
+          setRoles(newRoles);
+          setAnalysis(JSON.parse(cached) as AnalyzeRoleFitResponse);
+          setSelectedRole(targetTitle);
         }
       }
     } else {
       const v1RolesRaw = sessionStorage.getItem("suggested_roles");
       if (v1RolesRaw) {
         const originalRoles: RoleSuggestion[] = JSON.parse(v1RolesRaw);
-        setRoles(originalRoles);
         const currentRole = sessionStorage.getItem("selected_role") ?? originalRoles[0]?.title ?? "";
         const cached = sessionStorage.getItem(`analysis_cache_${currentRole}`);
-        if (cached) {
+        if (cached && currentRole) {
+          setRoles(originalRoles);
           setAnalysis(JSON.parse(cached) as AnalyzeRoleFitResponse);
           setSelectedRole(currentRole);
         }
@@ -408,21 +409,13 @@ export default function DashboardPage() {
           selectedRole={comparisonSelectedRole || selectedRole}
           onRoleSelect={handleComparisonRoleSelect}
         />
-        {showReuploadModal && (
-          <ReuploadModal
-            isLoading={reuploadLoading}
-            loadingMessage={reuploadLoadingMsg}
-            error={reuploadError}
-            onUpload={handleReupload}
-            onClose={() => { if (!reuploadLoading) { setShowReuploadModal(false); setReuploadError(null); } }}
-          />
-        )}
       </>
     );
   }
 
   // Roles available to compare (exclude current)
   const comparableRoles = roles.filter(r => r.title !== selectedRole);
+  const hasV2 = v2Roles.length > 0;
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--background)] lg:h-screen lg:flex-row lg:overflow-hidden">
@@ -434,7 +427,7 @@ export default function DashboardPage() {
           selectedRole={selectedRole}
           onRoleSwitch={handleRoleSwitch}
           isSwitching={isSwitching}
-          hasV2={v2Roles.length > 0}
+          hasV2={hasV2}
           activeVersion={activeVersion}
           onVersionSwitch={handleVersionSwitch}
         />
@@ -448,7 +441,7 @@ export default function DashboardPage() {
           isCompareLoading={isCompareLoading}
           canCompare={comparableRoles.length >= 1}
           onReupload={() => { setShowReuploadModal(true); setReuploadError(null); }}
-          hasV2={showComparison || v2Roles.length > 0}
+          hasV2={hasV2}
         />
 
         {/* Role picker (shown when picker is open) */}

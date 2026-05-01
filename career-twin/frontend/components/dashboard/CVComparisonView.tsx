@@ -34,9 +34,9 @@ function computeImprovements(
   const scoreDeltas = (["skills", "experience", "education"] as const)
     .map((key) => ({
       label: key.charAt(0).toUpperCase() + key.slice(1),
-      delta: (v2Score[key] ?? 0) - (v1Score[key] ?? 0),
+      delta: Number(v2Score[key] ?? 0) - Number(v1Score[key] ?? 0),
     }))
-    .filter((d) => d.delta !== 0);
+    .filter((d) => d.delta !== 0 && !isNaN(d.delta));
 
   return { newSkills, newStrengths, scoreDeltas };
 }

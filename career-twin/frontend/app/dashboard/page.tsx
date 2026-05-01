@@ -8,6 +8,7 @@ import { RightPanel } from "@/components/dashboard/RightPanel";
 import { ToolsRow } from "@/components/dashboard/ToolsRow";
 import { analyzeRoleFit, analyzeRoleFitWithRetry, uploadCV, confirmProfile, suggestRoles } from "@/lib/api";
 import { ReuploadModal } from "@/components/dashboard/ReuploadModal";
+import { CVComparisonView } from "@/components/dashboard/CVComparisonView";
 import type { AnalyzeRoleFitResponse, RoleSuggestion } from "@/lib/types";
 
 const CACHE_KEY = (title: string) => `analysis_cache_${title}`;
@@ -35,6 +36,8 @@ export default function DashboardPage() {
   const [v2Roles, setV2Roles] = useState<RoleSuggestion[]>([]);
   const [v2AnalysisMap, setV2AnalysisMap] = useState<Record<string, AnalyzeRoleFitResponse>>({});
   const [activeVersion, setActiveVersion] = useState<1 | 2>(1);
+  const [comparisonSelectedRole, setComparisonSelectedRole] = useState("");
+  const [v1AnalysisMap, setV1AnalysisMap] = useState<Record<string, AnalyzeRoleFitResponse>>({});
   const [highlightedSectionId, setHighlightedSectionId] = useState<string | null>(null);
   const [highlightSequence, setHighlightSequence] = useState(0);
   const highlightTimeoutRef = useRef<number | null>(null);
@@ -301,6 +304,18 @@ export default function DashboardPage() {
 
       setV2Roles(scoredRoles);
       setV2AnalysisMap(analysisMap);
+
+      // Snapshot v1 analysis map before showing comparison
+      const v1Map: Record<string, AnalyzeRoleFitResponse> = {};
+      for (const role of roles) {
+        const cached = sessionStorage.getItem(`analysis_cache_${role.title}`);
+        if (cached) {
+          try { v1Map[role.title] = JSON.parse(cached) as AnalyzeRoleFitResponse; } catch { /* ignore */ }
+        }
+      }
+      setV1AnalysisMap(v1Map);
+      setComparisonSelectedRole(selectedRole);
+
       setShowReuploadModal(false);
       setShowComparison(true);
     } catch (err) {
@@ -312,11 +327,99 @@ export default function DashboardPage() {
     }
   }
 
+  function handleComparisonRoleSelect(roleTitle: string, version: 1 | 2) {
+    setActiveVersion(version);
+    setShowComparison(false);
+
+    if (version === 2) {
+      const v2Analysis = v2AnalysisMap[roleTitle];
+      if (v2Analysis) {
+        setAnalysis(v2Analysis);
+        setRoles(v2Roles);
+        setSelectedRole(roleTitle);
+        sessionStorage.setItem("active_cv_version", "2");
+      }
+    } else {
+      const cached = sessionStorage.getItem(`analysis_cache_${roleTitle}`);
+      if (cached) {
+        setAnalysis(JSON.parse(cached) as AnalyzeRoleFitResponse);
+        setSelectedRole(roleTitle);
+        sessionStorage.setItem("active_cv_version", "1");
+      }
+    }
+  }
+
+  function handleVersionSwitch(version: 1 | 2) {
+    setActiveVersion(version);
+    sessionStorage.setItem("active_cv_version", version.toString());
+
+    if (version === 2) {
+      const v2RolesRaw = sessionStorage.getItem("v2_suggested_roles");
+      if (v2RolesRaw) {
+        const newRoles: RoleSuggestion[] = JSON.parse(v2RolesRaw);
+        setRoles(newRoles);
+        const firstRole = newRoles[0];
+        if (firstRole) {
+          const cached = sessionStorage.getItem(`v2_analysis_cache_${firstRole.title}`);
+          if (cached) {
+            setAnalysis(JSON.parse(cached) as AnalyzeRoleFitResponse);
+            setSelectedRole(firstRole.title);
+          }
+        }
+      }
+    } else {
+      const v1RolesRaw = sessionStorage.getItem("suggested_roles");
+      if (v1RolesRaw) {
+        const originalRoles: RoleSuggestion[] = JSON.parse(v1RolesRaw);
+        setRoles(originalRoles);
+        const currentRole = sessionStorage.getItem("selected_role") ?? originalRoles[0]?.title ?? "";
+        const cached = sessionStorage.getItem(`analysis_cache_${currentRole}`);
+        if (cached) {
+          setAnalysis(JSON.parse(cached) as AnalyzeRoleFitResponse);
+          setSelectedRole(currentRole);
+        }
+      }
+    }
+  }
+
   if (!analysis) return (
     <div className="fixed inset-0 flex items-center justify-center bg-[var(--background)]">
       <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#c4a882] border-t-transparent" />
     </div>
   );
+
+  if (showComparison) {
+    return (
+      <>
+        <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-[var(--border-soft)] bg-[rgba(252,250,246,0.94)] px-6 py-3 backdrop-blur-sm">
+          <button
+            onClick={() => setShowComparison(false)}
+            className="rounded-lg border border-[var(--border-soft)] bg-white px-3 py-1.5 text-xs font-medium text-[#5f574e] transition-colors hover:border-[#cfd9e1] hover:bg-[#f8fbfc] hover:text-[#3f5e78]"
+          >
+            ← Back to Dashboard
+          </button>
+        </div>
+        <CVComparisonView
+          candidateName={candidateName}
+          v1Roles={roles}
+          v2Roles={v2Roles}
+          v1AnalysisMap={v1AnalysisMap}
+          v2AnalysisMap={v2AnalysisMap}
+          selectedRole={comparisonSelectedRole || selectedRole}
+          onRoleSelect={handleComparisonRoleSelect}
+        />
+        {showReuploadModal && (
+          <ReuploadModal
+            isLoading={reuploadLoading}
+            loadingMessage={reuploadLoadingMsg}
+            error={reuploadError}
+            onUpload={handleReupload}
+            onClose={() => { if (!reuploadLoading) { setShowReuploadModal(false); setReuploadError(null); } }}
+          />
+        )}
+      </>
+    );
+  }
 
   // Roles available to compare (exclude current)
   const comparableRoles = roles.filter(r => r.title !== selectedRole);
@@ -331,6 +434,9 @@ export default function DashboardPage() {
           selectedRole={selectedRole}
           onRoleSwitch={handleRoleSwitch}
           isSwitching={isSwitching}
+          hasV2={v2Roles.length > 0}
+          activeVersion={activeVersion}
+          onVersionSwitch={handleVersionSwitch}
         />
       </div>
 

@@ -7,7 +7,7 @@ import { UploadZone } from "@/components/upload/UploadZone";
 import { uploadCV } from "@/lib/api";
 import { CareerTwinIntro } from "@/components/intro/CareerTwinIntro";
 import type { UploadResponse } from "@/lib/types";
-import { clearSession, touchSession } from "@/lib/session";
+import { clearSession, touchSession, isSessionExpired } from "@/lib/session";
 
 const LOADING_MESSAGES = [
   "Reading your CV…",
@@ -22,6 +22,12 @@ export default function UploadPage() {
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MESSAGES[0]);
   const [error, setError] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (!isSessionExpired() && localStorage.getItem("analysis_result")) {
+      router.push("/dashboard");
+    }
+  }, [router]);
 
   // Lock body scroll while intro is active
   useEffect(() => {

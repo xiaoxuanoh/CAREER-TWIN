@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { TextShimmer } from "@/components/core/text-shimmer";
 import { RoleCard } from "@/components/roles/RoleCard";
 import { suggestRoles, analyzeRoleFit, analyzeRoleFitWithRetry } from "@/lib/api";
+import { checkAndClearIfExpired, touchSession } from "@/lib/session";
 import { Loader2 } from "lucide-react";
 import type { RoleSuggestion, AnalyzeRoleFitResponse } from "@/lib/types";
 
@@ -35,7 +36,8 @@ export default function RolesPage() {
 
   useEffect(() => {
     let cancelled = false;
-    const profileId = sessionStorage.getItem("profile_id");
+    if (checkAndClearIfExpired()) { router.push("/"); return; }
+    const profileId = localStorage.getItem("profile_id");
     if (!profileId) { router.push("/"); return; }
 
     suggestRoles(profileId)
@@ -46,7 +48,7 @@ export default function RolesPage() {
         }));
         if (cancelled) return;
         setRoles(allRoles);
-        sessionStorage.setItem("suggested_roles", JSON.stringify(allRoles));
+        localStorage.setItem("suggested_roles", JSON.stringify(allRoles));
 
         // Re-run full analysis for every role so the cards always reflect fresh real results.
         const pending = new Set(allRoles.map((r) => r.id));
@@ -65,10 +67,10 @@ export default function RolesPage() {
                     ? { ...r, preview_match_score: actual ?? r.preview_match_score }
                     : r
                 );
-                sessionStorage.setItem("suggested_roles", JSON.stringify(updated));
+                localStorage.setItem("suggested_roles", JSON.stringify(updated));
                 return updated;
               });
-              sessionStorage.setItem(CACHE_KEY(role.title), JSON.stringify(result));
+              localStorage.setItem(CACHE_KEY(role.title), JSON.stringify(result));
             } catch {
               // silently skip failed role — card keeps score at 0
             } finally {
@@ -82,6 +84,7 @@ export default function RolesPage() {
           })
         ).then(() => {
           if (cancelled) return;
+          touchSession();
           // Break any tied scores so the ranked list has distinct values.
           // Also sync the cache so dashboard reads the same adjusted score.
           setRoles((prev) => {
@@ -95,18 +98,18 @@ export default function RolesPage() {
             }
             if (!changed) return prev;
             for (const role of sorted) {
-              const cached = sessionStorage.getItem(CACHE_KEY(role.title));
+              const cached = localStorage.getItem(CACHE_KEY(role.title));
               if (cached) {
                 try {
                   const data = JSON.parse(cached);
                   if (data.match_score?.overall !== role.preview_match_score) {
                     data.match_score = { ...data.match_score, overall: role.preview_match_score };
-                    sessionStorage.setItem(CACHE_KEY(role.title), JSON.stringify(data));
+                    localStorage.setItem(CACHE_KEY(role.title), JSON.stringify(data));
                   }
                 } catch { /* ignore */ }
               }
             }
-            sessionStorage.setItem("suggested_roles", JSON.stringify(sorted));
+            localStorage.setItem("suggested_roles", JSON.stringify(sorted));
             return sorted;
           });
         });
@@ -143,14 +146,14 @@ export default function RolesPage() {
 
   async function handleAnalyze() {
     if (!activeRole) return;
-    const profileId = sessionStorage.getItem("profile_id");
+    const profileId = localStorage.getItem("profile_id");
     if (!profileId) { router.push("/"); return; }
 
     // Use cached result if available (all suggested roles will be cached)
-    const cached = sessionStorage.getItem(CACHE_KEY(activeRole));
+    const cached = localStorage.getItem(CACHE_KEY(activeRole));
     if (cached) {
-      sessionStorage.setItem("selected_role", activeRole);
-      sessionStorage.setItem("analysis_result", cached);
+      localStorage.setItem("selected_role", activeRole);
+      localStorage.setItem("analysis_result", cached);
       router.push("/dashboard");
       return;
     }
@@ -167,13 +170,13 @@ export default function RolesPage() {
 
     try {
       const result = await analyzeRoleFit(profileId, activeRole);
-      sessionStorage.setItem("selected_role", activeRole);
-      sessionStorage.setItem("analysis_result", JSON.stringify(result));
-      sessionStorage.setItem(CACHE_KEY(activeRole), JSON.stringify(result));
+      localStorage.setItem("selected_role", activeRole);
+      localStorage.setItem("analysis_result", JSON.stringify(result));
+      localStorage.setItem(CACHE_KEY(activeRole), JSON.stringify(result));
 
       // Add the custom role as a card in the sidebar (6th card)
       const actualScore = (result.match_score as { overall?: number }).overall ?? 0;
-      const existing: { id: string; title: string }[] = JSON.parse(sessionStorage.getItem("suggested_roles") ?? "[]");
+      const existing: { id: string; title: string }[] = JSON.parse(localStorage.getItem("suggested_roles") ?? "[]");
       if (!existing.some((r) => r.title === activeRole)) {
         const customEntry = {
           id: activeRole.toLowerCase().replace(/\W+/g, "_"),
@@ -182,7 +185,7 @@ export default function RolesPage() {
           preview_match_score: actualScore,
           skills: (result.matched_skills ?? []).slice(0, 3),
         };
-        sessionStorage.setItem("suggested_roles", JSON.stringify([...existing, customEntry]));
+        localStorage.setItem("suggested_roles", JSON.stringify([...existing, customEntry]));
       }
 
       router.push("/dashboard");
@@ -348,7 +351,7 @@ export default function RolesPage() {
               disabled={!activeRole}
               className="w-full rounded-xl bg-slate-900 py-3.5 text-base font-semibold text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {activeRole && sessionStorage.getItem(CACHE_KEY(activeRole))
+              {activeRole && localStorage.getItem(CACHE_KEY(activeRole))
                 ? "View analysis →"
                 : "Analyze my fit →"}
             </button>

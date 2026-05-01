@@ -7,6 +7,7 @@ import { UploadZone } from "@/components/upload/UploadZone";
 import { uploadCV } from "@/lib/api";
 import { CareerTwinIntro } from "@/components/intro/CareerTwinIntro";
 import type { UploadResponse } from "@/lib/types";
+import { clearSession, touchSession } from "@/lib/session";
 
 const LOADING_MESSAGES = [
   "Reading your CV…",
@@ -65,7 +66,9 @@ export default function UploadPage() {
     try {
       const result: UploadResponse = await uploadCV(file);
       clearInterval(interval);
-      sessionStorage.setItem("upload_result", JSON.stringify(result));
+      clearSession();
+      localStorage.setItem("upload_result", JSON.stringify(result));
+      touchSession();
       router.push("/review");
     } catch (err) {
       clearInterval(interval);

@@ -7,6 +7,7 @@ import { MainContent } from "@/components/dashboard/MainContent";
 import { RightPanel } from "@/components/dashboard/RightPanel";
 import { ToolsRow } from "@/components/dashboard/ToolsRow";
 import { analyzeRoleFit, analyzeRoleFitWithRetry, uploadCV, confirmProfile, suggestRoles } from "@/lib/api";
+import { checkAndClearIfExpired, touchSession } from "@/lib/session";
 import { ReuploadModal } from "@/components/dashboard/ReuploadModal";
 import { CVComparisonView } from "@/components/dashboard/CVComparisonView";
 import type { AnalyzeRoleFitResponse, RoleSuggestion } from "@/lib/types";
@@ -46,15 +47,16 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let cancelled = false;
-    const raw = sessionStorage.getItem("analysis_result");
+    if (checkAndClearIfExpired()) { router.push("/"); return; }
+    const raw = localStorage.getItem("analysis_result");
     if (!raw) { router.push("/roles"); return; }
     const parsedAnalysis: AnalyzeRoleFitResponse = JSON.parse(raw);
     setAnalysis(parsedAnalysis);
 
-    const rolesRaw = sessionStorage.getItem("suggested_roles");
+    const rolesRaw = localStorage.getItem("suggested_roles");
     const parsedRoles: RoleSuggestion[] = rolesRaw ? JSON.parse(rolesRaw) : [];
 
-    const role = sessionStorage.getItem("selected_role") ?? "";
+    const role = localStorage.getItem("selected_role") ?? "";
     if (role) setSelectedRole(role);
 
     // Sync preview_match_score with the actual analysis score for the selected role
@@ -64,15 +66,15 @@ export default function DashboardPage() {
         r.title === role ? { ...r, preview_match_score: actualScore } : r
       );
       setRoles(updatedRoles);
-      sessionStorage.setItem("suggested_roles", JSON.stringify(updatedRoles));
+      localStorage.setItem("suggested_roles", JSON.stringify(updatedRoles));
     } else {
       setRoles(parsedRoles);
     }
 
-    const pid = sessionStorage.getItem("profile_id");
+    const pid = localStorage.getItem("profile_id");
     if (pid) setProfileId(pid);
 
-    const profileRaw = sessionStorage.getItem("confirmed_profile");
+    const profileRaw = localStorage.getItem("confirmed_profile");
     if (profileRaw) {
       try { setCandidateName(JSON.parse(profileRaw).name ?? ""); } catch { /* ignore */ }
     }
@@ -81,7 +83,7 @@ export default function DashboardPage() {
       void (async () => {
         for (const currentRole of parsedRoles) {
           // Skip if we already have a full cached analysis for this role
-          if (sessionStorage.getItem(CACHE_KEY(currentRole.title))) {
+          if (localStorage.getItem(CACHE_KEY(currentRole.title))) {
             continue;
           }
 
@@ -96,17 +98,17 @@ export default function DashboardPage() {
 
             if (currentRole.title === role) {
               setAnalysis(result);
-              sessionStorage.setItem("analysis_result", JSON.stringify(result));
+              localStorage.setItem("analysis_result", JSON.stringify(result));
             }
 
-            sessionStorage.setItem(CACHE_KEY(currentRole.title), JSON.stringify(result));
+            localStorage.setItem(CACHE_KEY(currentRole.title), JSON.stringify(result));
               setRoles((prev) => {
                 const updated = prev.map((item) =>
                   item.title === currentRole.title
                     ? { ...item, preview_match_score: nextScore }
                     : item
                 );
-                sessionStorage.setItem("suggested_roles", JSON.stringify(updated));
+                localStorage.setItem("suggested_roles", JSON.stringify(updated));
                 return updated;
               });
           } catch {
@@ -134,14 +136,15 @@ export default function DashboardPage() {
       ? `v2_analysis_cache_${role.title}`
       : `analysis_cache_${role.title}`;
     const activeProfileId = isV2
-      ? (sessionStorage.getItem("v2_profile_id") ?? profileId)
+      ? (localStorage.getItem("v2_profile_id") ?? profileId)
       : profileId;
 
-    const cached = sessionStorage.getItem(activeCacheKey);
+    const cached = localStorage.getItem(activeCacheKey);
     if (cached) {
       const result = JSON.parse(cached) as AnalyzeRoleFitResponse;
       setAnalysis(result);
       setSelectedRole(role.title);
+      touchSession();
       const actualScore = (result.match_score as { overall?: number }).overall;
       if (actualScore !== undefined) {
         setRoles(prev => {
@@ -160,7 +163,8 @@ export default function DashboardPage() {
       const result = await analyzeRoleFit(activeProfileId, role.title);
       setAnalysis(result);
       setSelectedRole(role.title);
-      sessionStorage.setItem(activeCacheKey, JSON.stringify(result));
+      localStorage.setItem(activeCacheKey, JSON.stringify(result));
+      touchSession();
       const actualScore = (result.match_score as { overall?: number }).overall;
       if (actualScore !== undefined) {
         setRoles(prev => {
@@ -228,7 +232,7 @@ export default function DashboardPage() {
     setComparePickerOpen(false);
 
     // Use pre-computed cache so compare score matches what the role card shows
-    const cached = sessionStorage.getItem(CACHE_KEY(role.title));
+    const cached = localStorage.getItem(CACHE_KEY(role.title));
     if (cached) {
       setCompareAnalysis(JSON.parse(cached) as AnalyzeRoleFitResponse);
       setCompareRole(role.title);
@@ -240,7 +244,7 @@ export default function DashboardPage() {
     setIsCompareLoading(true);
     try {
       const result = await analyzeRoleFit(profileId, role.title);
-      sessionStorage.setItem(CACHE_KEY(role.title), JSON.stringify(result));
+      localStorage.setItem(CACHE_KEY(role.title), JSON.stringify(result));
       setCompareAnalysis(result);
       setCompareRole(role.title);
       setIsComparing(true);
@@ -293,12 +297,12 @@ export default function DashboardPage() {
       for (const entry of analysisEntries) {
         if (entry.analysis) {
           analysisMap[entry.role.title] = entry.analysis;
-          sessionStorage.setItem(`v2_analysis_cache_${entry.role.title}`, JSON.stringify(entry.analysis));
+          localStorage.setItem(`v2_analysis_cache_${entry.role.title}`, JSON.stringify(entry.analysis));
         }
       }
-      sessionStorage.setItem("v2_profile_id", v2ProfileId);
-      sessionStorage.setItem("v2_suggested_roles", JSON.stringify(scoredRoles));
-      sessionStorage.setItem("active_cv_version", "1");
+      localStorage.setItem("v2_profile_id", v2ProfileId);
+      localStorage.setItem("v2_suggested_roles", JSON.stringify(scoredRoles));
+      localStorage.setItem("active_cv_version", "1");
 
       setV2Roles(scoredRoles);
       setV2AnalysisMap(analysisMap);
@@ -306,7 +310,7 @@ export default function DashboardPage() {
       // Snapshot v1 analysis map before showing comparison
       const v1Map: Record<string, AnalyzeRoleFitResponse> = {};
       for (const role of roles) {
-        const cached = sessionStorage.getItem(`analysis_cache_${role.title}`);
+        const cached = localStorage.getItem(`analysis_cache_${role.title}`);
         if (cached) {
           try { v1Map[role.title] = JSON.parse(cached) as AnalyzeRoleFitResponse; } catch { /* ignore */ }
         }
@@ -334,30 +338,30 @@ export default function DashboardPage() {
         setAnalysis(v2Analysis);
         setRoles(v2Roles);
         setSelectedRole(roleTitle);
-        sessionStorage.setItem("active_cv_version", "2");
+        localStorage.setItem("active_cv_version", "2");
       }
     } else {
-      const cached = sessionStorage.getItem(`analysis_cache_${roleTitle}`);
+      const cached = localStorage.getItem(`analysis_cache_${roleTitle}`);
       if (cached) {
         setAnalysis(JSON.parse(cached) as AnalyzeRoleFitResponse);
         setSelectedRole(roleTitle);
-        sessionStorage.setItem("active_cv_version", "1");
+        localStorage.setItem("active_cv_version", "1");
       }
     }
   }
 
   function handleVersionSwitch(version: 1 | 2) {
     setActiveVersion(version);
-    sessionStorage.setItem("active_cv_version", version.toString());
+    localStorage.setItem("active_cv_version", version.toString());
 
     if (version === 2) {
-      const v2RolesRaw = sessionStorage.getItem("v2_suggested_roles");
+      const v2RolesRaw = localStorage.getItem("v2_suggested_roles");
       if (v2RolesRaw) {
         const newRoles: RoleSuggestion[] = JSON.parse(v2RolesRaw);
         // Try to match current selected role, fall back to first role
         const targetTitle = newRoles.find((r) => r.title === selectedRole)?.title ?? newRoles[0]?.title;
         const cached = targetTitle
-          ? sessionStorage.getItem(`v2_analysis_cache_${targetTitle}`)
+          ? localStorage.getItem(`v2_analysis_cache_${targetTitle}`)
           : null;
         if (cached && targetTitle) {
           setRoles(newRoles);
@@ -366,11 +370,11 @@ export default function DashboardPage() {
         }
       }
     } else {
-      const v1RolesRaw = sessionStorage.getItem("suggested_roles");
+      const v1RolesRaw = localStorage.getItem("suggested_roles");
       if (v1RolesRaw) {
         const originalRoles: RoleSuggestion[] = JSON.parse(v1RolesRaw);
-        const currentRole = sessionStorage.getItem("selected_role") ?? originalRoles[0]?.title ?? "";
-        const cached = sessionStorage.getItem(`analysis_cache_${currentRole}`);
+        const currentRole = localStorage.getItem("selected_role") ?? originalRoles[0]?.title ?? "";
+        const cached = localStorage.getItem(`analysis_cache_${currentRole}`);
         if (cached && currentRole) {
           setRoles(originalRoles);
           setAnalysis(JSON.parse(cached) as AnalyzeRoleFitResponse);

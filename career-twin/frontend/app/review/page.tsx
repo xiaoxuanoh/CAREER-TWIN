@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { ProfileForm } from "@/components/review/ProfileForm";
 import { confirmProfile } from "@/lib/api";
 import type { CVProfile, UploadResponse } from "@/lib/types";
+import { checkAndClearIfExpired, touchSession } from "@/lib/session";
 
 const TRUNCATED_FIELD_LABELS: Record<string, string> = {
   experience: "Experience",
@@ -35,7 +36,7 @@ function readUploadResult(): { profile: CVProfile | null; parseWarning: string |
     return { profile: null, parseWarning: null, truncatedSections: [] };
   }
 
-  const raw = sessionStorage.getItem("upload_result");
+  const raw = localStorage.getItem("upload_result");
   if (!raw) {
     return { profile: null, parseWarning: null, truncatedSections: [] };
   }
@@ -63,7 +64,7 @@ export default function ReviewPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!profile) {
+    if (!profile || checkAndClearIfExpired()) {
       router.push("/");
     }
   }, [profile, router]);
@@ -73,8 +74,9 @@ export default function ReviewPage() {
     setError(null);
     try {
       const result = await confirmProfile(updated);
-      sessionStorage.setItem("profile_id", result.profile_id);
-      sessionStorage.setItem("confirmed_profile", JSON.stringify(updated));
+      localStorage.setItem("profile_id", result.profile_id);
+      localStorage.setItem("confirmed_profile", JSON.stringify(updated));
+      touchSession();
       router.push("/roles");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save profile.");

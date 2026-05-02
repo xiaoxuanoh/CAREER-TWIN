@@ -126,6 +126,7 @@ export default function ReviewPage() {
 
   if (prefetching) return (
     <div className="fixed inset-0 flex flex-col items-center justify-center gap-5 bg-[var(--background)]">
+      <h1 className="text-3xl font-bold tracking-tight text-slate-900">Mapping Your Future</h1>
       <div className="relative w-48 overflow-hidden">
         <div className="h-[2px] w-full bg-[#d9dde0]" />
         <motion.div

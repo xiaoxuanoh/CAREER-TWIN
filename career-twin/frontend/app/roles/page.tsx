@@ -37,92 +37,129 @@ export default function RolesPage() {
   useEffect(() => {
     let cancelled = false;
     if (checkAndClearIfExpired()) { router.push("/"); return; }
-    const profileId = localStorage.getItem("profile_id");
+    const profileId = localStorage.getItem("profile_id") as string | null;
     if (!profileId) { router.push("/"); return; }
+    const pid: string = profileId;
 
-    suggestRoles(profileId)
-      .then((data) => {
-        const allRoles = data.roles.map((role) => ({
-          ...role,
-          preview_match_score: 0,
-        }));
-        if (cancelled) return;
-        setRoles(allRoles);
-        localStorage.setItem("suggested_roles", JSON.stringify(allRoles));
+    function runAnalysis(allRoles: RoleSuggestion[]) {
+      // Only analyse roles that aren't already cached (review page may have pre-fetched some).
+      const pending = new Set(
+        allRoles.filter((r) => !localStorage.getItem(CACHE_KEY(r.title))).map((r) => r.id)
+      );
 
-        // Re-run full analysis for every role so the cards always reflect fresh real results.
-        const pending = new Set(allRoles.map((r) => r.id));
+      // Seed scores from any caches that already exist.
+      const seeded = allRoles.map((role) => {
+        const hit = localStorage.getItem(CACHE_KEY(role.title));
+        if (!hit) return role;
+        try {
+          const data: AnalyzeRoleFitResponse = JSON.parse(hit);
+          const actual = (data.match_score as { overall?: number }).overall;
+          return { ...role, preview_match_score: actual ?? role.preview_match_score };
+        } catch { return role; }
+      });
+
+      if (!cancelled) {
+        setRoles(seeded);
         setLoadingIds(pending);
+        localStorage.setItem("suggested_roles", JSON.stringify(seeded));
+      }
 
-        void Promise.all(
-          allRoles.map(async (role) => {
+      void Promise.all(
+        allRoles.filter((r) => pending.has(r.id)).map(async (role) => {
+          // Double-check cache in case background pre-fetch completed between mount and now.
+          const earlyHit = localStorage.getItem(CACHE_KEY(role.title));
+          if (earlyHit) {
             try {
-              const result: AnalyzeRoleFitResponse = await analyzeRoleFitWithRetry(profileId, role.title, 4);
-              if (cancelled) return;
+              const data: AnalyzeRoleFitResponse = JSON.parse(earlyHit);
+              const actual = (data.match_score as { overall?: number }).overall;
+              if (!cancelled) {
+                setRoles((prev) => {
+                  const updated = prev.map((r) =>
+                    r.id === role.id ? { ...r, preview_match_score: actual ?? r.preview_match_score } : r
+                  );
+                  localStorage.setItem("suggested_roles", JSON.stringify(updated));
+                  return updated;
+                });
+              }
+            } catch { /* ignore */ }
+            if (!cancelled) setLoadingIds((prev) => { const n = new Set(prev); n.delete(role.id); return n; });
+            return;
+          }
 
-              const actual = (result.match_score as { overall?: number }).overall;
-              setRoles((prev) => {
-                const updated = prev.map((r) =>
-                  r.id === role.id
-                    ? { ...r, preview_match_score: actual ?? r.preview_match_score }
-                    : r
-                );
-                localStorage.setItem("suggested_roles", JSON.stringify(updated));
-                return updated;
-              });
-              localStorage.setItem(CACHE_KEY(role.title), JSON.stringify(result));
-            } catch {
-              // silently skip failed role — card keeps score at 0
-            } finally {
-              if (cancelled) return;
-              setLoadingIds((prev) => {
-                const next = new Set(prev);
-                next.delete(role.id);
-                return next;
-              });
+          try {
+            const result: AnalyzeRoleFitResponse = await analyzeRoleFitWithRetry(pid, role.title, 4);
+            if (cancelled) return;
+            const actual = (result.match_score as { overall?: number }).overall;
+            setRoles((prev) => {
+              const updated = prev.map((r) =>
+                r.id === role.id ? { ...r, preview_match_score: actual ?? r.preview_match_score } : r
+              );
+              localStorage.setItem("suggested_roles", JSON.stringify(updated));
+              return updated;
+            });
+            localStorage.setItem(CACHE_KEY(role.title), JSON.stringify(result));
+          } catch {
+            // silently skip — card keeps score at 0
+          } finally {
+            if (!cancelled) setLoadingIds((prev) => { const n = new Set(prev); n.delete(role.id); return n; });
+          }
+        })
+      ).then(() => {
+        if (cancelled) return;
+        touchSession();
+        setRoles((prev) => {
+          const sorted = [...prev].sort((a, b) => b.preview_match_score - a.preview_match_score);
+          let changed = false;
+          for (let i = 1; i < sorted.length; i++) {
+            if (sorted[i].preview_match_score >= sorted[i - 1].preview_match_score) {
+              sorted[i] = { ...sorted[i], preview_match_score: sorted[i - 1].preview_match_score - 1 };
+              changed = true;
             }
-          })
-        ).then(() => {
-          if (cancelled) return;
-          touchSession();
-          // Break any tied scores so the ranked list has distinct values.
-          // Also sync the cache so dashboard reads the same adjusted score.
-          setRoles((prev) => {
-            const sorted = [...prev].sort((a, b) => b.preview_match_score - a.preview_match_score);
-            let changed = false;
-            for (let i = 1; i < sorted.length; i++) {
-              if (sorted[i].preview_match_score >= sorted[i - 1].preview_match_score) {
-                sorted[i] = { ...sorted[i], preview_match_score: sorted[i - 1].preview_match_score - 1 };
-                changed = true;
-              }
+          }
+          if (!changed) return prev;
+          for (const role of sorted) {
+            const cached = localStorage.getItem(CACHE_KEY(role.title));
+            if (cached) {
+              try {
+                const data = JSON.parse(cached);
+                if (data.match_score?.overall !== role.preview_match_score) {
+                  data.match_score = { ...data.match_score, overall: role.preview_match_score };
+                  localStorage.setItem(CACHE_KEY(role.title), JSON.stringify(data));
+                }
+              } catch { /* ignore */ }
             }
-            if (!changed) return prev;
-            for (const role of sorted) {
-              const cached = localStorage.getItem(CACHE_KEY(role.title));
-              if (cached) {
-                try {
-                  const data = JSON.parse(cached);
-                  if (data.match_score?.overall !== role.preview_match_score) {
-                    data.match_score = { ...data.match_score, overall: role.preview_match_score };
-                    localStorage.setItem(CACHE_KEY(role.title), JSON.stringify(data));
-                  }
-                } catch { /* ignore */ }
-              }
-            }
-            localStorage.setItem("suggested_roles", JSON.stringify(sorted));
-            return sorted;
-          });
+          }
+          localStorage.setItem("suggested_roles", JSON.stringify(sorted));
+          return sorted;
         });
+      });
+    }
+
+    // Use pre-fetched roles from review page if available — skips suggestRoles call.
+    const prefetched = localStorage.getItem("suggested_roles");
+    if (prefetched) {
+      try {
+        const allRoles: RoleSuggestion[] = JSON.parse(prefetched);
+        if (allRoles.length > 0) {
+          setLoadingRoles(false);
+          runAnalysis(allRoles);
+          return () => { cancelled = true; };
+        }
+      } catch { /* fall through to normal fetch */ }
+    }
+
+    suggestRoles(pid)
+      .then((data) => {
+        const allRoles = data.roles.map((role) => ({ ...role, preview_match_score: 0 }));
+        if (cancelled) return;
+        localStorage.setItem("suggested_roles", JSON.stringify(allRoles));
+        runAnalysis(allRoles);
       })
       .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load roles.");
-        }
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load roles.");
       })
       .finally(() => {
-        if (!cancelled) {
-          setLoadingRoles(false);
-        }
+        if (!cancelled) setLoadingRoles(false);
       });
 
     return () => {

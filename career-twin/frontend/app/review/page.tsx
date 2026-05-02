@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { ProfileForm } from "@/components/review/ProfileForm";
-import { confirmProfile } from "@/lib/api";
-import type { CVProfile, UploadResponse } from "@/lib/types";
+import { confirmProfile, suggestRoles, analyzeRoleFitWithRetry } from "@/lib/api";
+import type { CVProfile, UploadResponse, RoleSuggestion, AnalyzeRoleFitResponse } from "@/lib/types";
 import { checkAndClearIfExpired, touchSession } from "@/lib/session";
 
 const TRUNCATED_FIELD_LABELS: Record<string, string> = {
@@ -57,10 +57,31 @@ function readUploadResult(): { profile: CVProfile | null; parseWarning: string |
   }
 }
 
+const ANALYSIS_CACHE_KEY = (title: string) => `analysis_cache_${title}`;
+
+function fireBackgroundAnalysis(profileId: string, roles: RoleSuggestion[]) {
+  void Promise.all(
+    roles.map(async (role) => {
+      if (localStorage.getItem(ANALYSIS_CACHE_KEY(role.title))) return;
+      try {
+        const result: AnalyzeRoleFitResponse = await analyzeRoleFitWithRetry(profileId, role.title, 4);
+        const actual = (result.match_score as { overall?: number }).overall;
+        const current: RoleSuggestion[] = JSON.parse(localStorage.getItem("suggested_roles") ?? "[]");
+        const updated = current.map((r) =>
+          r.id === role.id ? { ...r, preview_match_score: actual ?? r.preview_match_score } : r
+        );
+        localStorage.setItem("suggested_roles", JSON.stringify(updated));
+        localStorage.setItem(ANALYSIS_CACHE_KEY(role.title), JSON.stringify(result));
+      } catch { /* ignore — roles page will retry on mount */ }
+    })
+  );
+}
+
 export default function ReviewPage() {
   const router = useRouter();
   const [{ profile, parseWarning, truncatedSections }] = useState(readUploadResult);
   const [isLoading, setIsLoading] = useState(false);
+  const [prefetching, setPrefetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -77,16 +98,44 @@ export default function ReviewPage() {
       localStorage.setItem("profile_id", result.profile_id);
       localStorage.setItem("confirmed_profile", JSON.stringify(updated));
       touchSession();
+
+      // Pre-fetch role suggestions while still on this page so the roles
+      // page can skip its own suggestRoles call and show cards immediately.
+      setIsLoading(false);
+      setPrefetching(true);
+      const rolesData = await suggestRoles(result.profile_id);
+      const allRoles = rolesData.roles.map((role) => ({ ...role, preview_match_score: 0 }));
+      localStorage.setItem("suggested_roles", JSON.stringify(allRoles));
+
+      // Kick off analysis in background — roles page will pick up cached results.
+      fireBackgroundAnalysis(result.profile_id, allRoles);
+
       router.push("/roles");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save profile.");
       setIsLoading(false);
+      setPrefetching(false);
     }
   }
 
   if (!profile) return (
     <div className="fixed inset-0 flex items-center justify-center bg-[var(--background)]">
       <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#c4a882] border-t-transparent" />
+    </div>
+  );
+
+  if (prefetching) return (
+    <div className="fixed inset-0 flex flex-col items-center justify-center gap-5 bg-[var(--background)]">
+      <div className="relative w-48 overflow-hidden">
+        <div className="h-[2px] w-full bg-[#d9dde0]" />
+        <motion.div
+          className="absolute left-0 top-0 h-[2px] w-[56%] bg-[#7f94a5]"
+          initial={{ x: "-75%" }}
+          animate={{ x: "220%" }}
+          transition={{ duration: 1.2, ease: "easeInOut", repeat: Number.POSITIVE_INFINITY }}
+        />
+      </div>
+      <p className="text-sm text-slate-500">Mapping your career paths…</p>
     </div>
   );
 

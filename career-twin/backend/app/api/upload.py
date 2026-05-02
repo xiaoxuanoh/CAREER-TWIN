@@ -5,7 +5,8 @@ from app.models.profile import UploadResponse
 
 router = APIRouter()
 
-ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx"}
+# 限制只允许上传 .pdf 和 .docx
+ALLOWED_EXTENSIONS = {".pdf", ".docx"}
 MAX_FILE_BYTES = 10 * 1024 * 1024  # 10 MB
 MIN_TEXT_LENGTH = 100  # chars — below this we warn about parse quality
 

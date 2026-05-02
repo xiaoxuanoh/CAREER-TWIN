@@ -109,26 +109,6 @@ export default function RolesPage() {
         touchSession();
         setRoles((prev) => {
           const sorted = [...prev].sort((a, b) => b.preview_match_score - a.preview_match_score);
-          let changed = false;
-          for (let i = 1; i < sorted.length; i++) {
-            if (sorted[i].preview_match_score >= sorted[i - 1].preview_match_score) {
-              sorted[i] = { ...sorted[i], preview_match_score: sorted[i - 1].preview_match_score - 1 };
-              changed = true;
-            }
-          }
-          if (!changed) return prev;
-          for (const role of sorted) {
-            const cached = localStorage.getItem(CACHE_KEY(role.title));
-            if (cached) {
-              try {
-                const data = JSON.parse(cached);
-                if (data.match_score?.overall !== role.preview_match_score) {
-                  data.match_score = { ...data.match_score, overall: role.preview_match_score };
-                  localStorage.setItem(CACHE_KEY(role.title), JSON.stringify(data));
-                }
-              } catch { /* ignore */ }
-            }
-          }
           localStorage.setItem("suggested_roles", JSON.stringify(sorted));
           return sorted;
         });

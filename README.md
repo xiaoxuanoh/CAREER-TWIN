@@ -113,7 +113,7 @@ The app works without a Groq API key. Every LLM service (`cv_structurer`, `role_
 |--------|------|-------------|
 | `POST` | `/upload-cv` | Upload PDF/DOCX, extract and structure CV |
 | `POST` | `/confirm-profile` | Store confirmed profile, return `profile_id` |
-| `POST` | `/suggest-roles` | Get 3 AI-suggested career roles |
+| `POST` | `/suggest-roles` | Get 5 AI-suggested career roles |
 | `POST` | `/analyze-role-fit` | Full 15-field career fit analysis |
 | `GET` | `/health` | Health check |
 

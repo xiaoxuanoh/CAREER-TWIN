@@ -60,9 +60,9 @@ function readUploadResult(): { profile: CVProfile | null; parseWarning: string |
 const ANALYSIS_CACHE_KEY = (title: string) => `analysis_cache_${title}`;
 
 function fireBackgroundAnalysis(profileId: string, roles: RoleSuggestion[]) {
-  void Promise.all(
-    roles.map(async (role) => {
-      if (localStorage.getItem(ANALYSIS_CACHE_KEY(role.title))) return;
+  roles.forEach((role, i) => {
+    if (localStorage.getItem(ANALYSIS_CACHE_KEY(role.title))) return;
+    setTimeout(async () => {
       try {
         const result: AnalyzeRoleFitResponse = await analyzeRoleFitWithRetry(profileId, role.title, 4);
         const actual = (result.match_score as { overall?: number }).overall;
@@ -73,8 +73,8 @@ function fireBackgroundAnalysis(profileId: string, roles: RoleSuggestion[]) {
         localStorage.setItem("suggested_roles", JSON.stringify(updated));
         localStorage.setItem(ANALYSIS_CACHE_KEY(role.title), JSON.stringify(result));
       } catch { /* ignore — roles page will retry on mount */ }
-    })
-  );
+    }, i * 250);
+  });
 }
 
 export default function ReviewPage() {

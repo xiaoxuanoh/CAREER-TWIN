@@ -1,4 +1,5 @@
 import os
+import random
 import httpx
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -29,8 +30,16 @@ def has_keys() -> bool:
     return bool(_load_keys())
 
 
-def groq_chat_sync(payload: dict, timeout: float = 60.0) -> dict:
+def _rotated_keys() -> list[str]:
     keys = _load_keys()
+    if not keys:
+        return keys
+    start = random.randint(0, len(keys) - 1)
+    return keys[start:] + keys[:start]
+
+
+def groq_chat_sync(payload: dict, timeout: float = 60.0) -> dict:
+    keys = _rotated_keys()
     if not keys:
         raise RuntimeError("No Groq API keys configured.")
     for key in keys:
@@ -48,7 +57,7 @@ def groq_chat_sync(payload: dict, timeout: float = 60.0) -> dict:
 
 
 async def groq_chat_async(payload: dict, timeout: float = 60.0) -> dict:
-    keys = _load_keys()
+    keys = _rotated_keys()
     if not keys:
         raise RuntimeError("No Groq API keys configured.")
     async with httpx.AsyncClient(timeout=timeout) as client:

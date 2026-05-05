@@ -384,6 +384,36 @@ export default function DashboardPage() {
     }
   }
 
+  const handleGlobalReset = () => {
+    // 1. 定义需要清除的所有 LocalStorage 键名 [cite: 1]
+    const keysToRemove = [
+      "analysis_result",
+      "upload_result",
+      "suggested_roles",
+      "selected_role",
+      "profile_id",
+      "confirmed_profile",
+      "v2_profile_id",
+      "v2_suggested_roles",
+      "active_cv_version"
+    ];
+    
+    // 2. 循环清除所有动态生成的分析缓存 [cite: 1]
+    const keys = Object.keys(localStorage);
+    keys.forEach(key => {
+      if (key.startsWith("analysis_cache_") || key.startsWith("v2_analysis_cache_")) {
+        localStorage.removeItem(key);
+      }
+    });
+
+    // 3. 清除固定键名
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+
+    // 4. 强制跳转回初始上传页面 [cite: 1]
+    router.push("/");
+  };
+
+  
   if (!analysis) return (
     <div className="fixed inset-0 flex items-center justify-center bg-[var(--background)]">
       <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#c4a882] border-t-transparent" />
@@ -441,6 +471,7 @@ export default function DashboardPage() {
           isCompareLoading={isCompareLoading}
           canCompare={comparableRoles.length >= 1}
           onReupload={() => { setShowReuploadModal(true); setReuploadError(null); }}
+          onReset={handleGlobalReset} 
           hasV2={hasV2}
           onShowComparison={() => setShowComparison(true)}
         />

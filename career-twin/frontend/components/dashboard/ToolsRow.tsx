@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { RotateCcw } from "lucide-react"; 
 
 interface ToolsRowProps {
   onCompare: () => void;
@@ -8,6 +9,7 @@ interface ToolsRowProps {
   isCompareLoading: boolean;
   canCompare: boolean;
   onReupload: () => void;
+  onReset: () => void; //
   hasV2: boolean;
   onShowComparison?: () => void;
 }
@@ -18,6 +20,7 @@ export function ToolsRow({
   isCompareLoading,
   canCompare,
   onReupload,
+  onReset, 
   hasV2,
   onShowComparison,
 }: ToolsRowProps) {
@@ -61,6 +64,15 @@ export function ToolsRow({
           ↑ Upload New CV
         </button>
       )}
+      <button
+        onClick={onReset}
+        className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:border-red-300 hover:bg-red-100"
+      >
+        <div className="flex items-center gap-1.5">
+          <RotateCcw className="h-3.5 w-3.5" />
+          <span>Reset</span>
+        </div>
+      </button>
     </div>
   );
 }

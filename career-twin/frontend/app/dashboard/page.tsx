@@ -260,12 +260,7 @@ export default function DashboardPage() {
     setReuploadError(null);
     setReuploadLoading(true);
 
-    const MESSAGES = [
-      "Parsing your new CV…",
-      "Identifying changes…",
-      "Re-analysing roles…",
-      "Almost there…",
-    ];
+    const MESSAGES = ["Parsing your new CV…", "Identifying changes…", "Re-analysing roles…", "Almost there…"];
     let msgIdx = 0;
     const msgInterval = window.setInterval(() => {
       msgIdx = (msgIdx + 1) % MESSAGES.length;
@@ -273,13 +268,19 @@ export default function DashboardPage() {
     }, 2500);
 
     try {
+      // 1. 上传并更新姓名
       const uploadResult = await uploadCV(file);
+      const newName = uploadResult.structured.name ?? "Unknown Candidate";
+      setCandidateName(newName); 
+      localStorage.setItem("v2_candidate_name", newName);
+
+      // 2. 确认 Profile 并获取新建议
       const confirmResult = await confirmProfile(uploadResult.structured);
       const v2ProfileId = confirmResult.profile_id;
-
       const rolesResult = await suggestRoles(v2ProfileId);
       const newRoles = rolesResult.roles;
 
+      // 3. 分析新角色
       const analysisEntries = await Promise.all(
         newRoles.map(async (role) => {
           try {
@@ -292,6 +293,7 @@ export default function DashboardPage() {
         })
       );
 
+      // 4. 整理结果并存入 V2 缓存
       const scoredRoles = analysisEntries.map((e) => e.role);
       const analysisMap: Record<string, AnalyzeRoleFitResponse> = {};
       for (const entry of analysisEntries) {
@@ -300,25 +302,28 @@ export default function DashboardPage() {
           localStorage.setItem(`v2_analysis_cache_${entry.role.title}`, JSON.stringify(entry.analysis));
         }
       }
+
       localStorage.setItem("v2_profile_id", v2ProfileId);
       localStorage.setItem("v2_suggested_roles", JSON.stringify(scoredRoles));
-      localStorage.setItem("active_cv_version", "1");
+      localStorage.setItem("active_cv_version", "2");
 
       setV2Roles(scoredRoles);
       setV2AnalysisMap(analysisMap);
+      setActiveVersion(2);
 
-      // Snapshot v1 analysis map before showing comparison
+      // 5. 备份 V1 数据用于对比
       const v1Map: Record<string, AnalyzeRoleFitResponse> = {};
-      for (const role of roles) {
+      roles.forEach(role => {
         const cached = localStorage.getItem(`analysis_cache_${role.title}`);
         if (cached) {
-          try { v1Map[role.title] = JSON.parse(cached) as AnalyzeRoleFitResponse; } catch { /* ignore */ }
+          try { v1Map[role.title] = JSON.parse(cached); } catch { /* ignore */ }
         }
-      }
+      });
       setV1AnalysisMap(v1Map);
 
       setShowReuploadModal(false);
       setShowComparison(true);
+
     } catch (err) {
       setReuploadError(err instanceof Error ? err.message : "Re-analysis failed. Please try again.");
     } finally {
@@ -355,14 +360,16 @@ export default function DashboardPage() {
     localStorage.setItem("active_cv_version", version.toString());
 
     if (version === 2) {
+      // 1. 换名字
+      const v2Name = localStorage.getItem("v2_candidate_name");
+      if (v2Name) setCandidateName(v2Name);
+
+      // 2. 换角色列表和分析内容
       const v2RolesRaw = localStorage.getItem("v2_suggested_roles");
       if (v2RolesRaw) {
         const newRoles: RoleSuggestion[] = JSON.parse(v2RolesRaw);
-        // Try to match current selected role, fall back to first role
         const targetTitle = newRoles.find((r) => r.title === selectedRole)?.title ?? newRoles[0]?.title;
-        const cached = targetTitle
-          ? localStorage.getItem(`v2_analysis_cache_${targetTitle}`)
-          : null;
+        const cached = targetTitle ? localStorage.getItem(`v2_analysis_cache_${targetTitle}`) : null;
         if (cached && targetTitle) {
           setRoles(newRoles);
           setAnalysis(JSON.parse(cached) as AnalyzeRoleFitResponse);
@@ -370,6 +377,13 @@ export default function DashboardPage() {
         }
       }
     } else {
+      // 1. 换回原名字
+      const v1Raw = localStorage.getItem("confirmed_profile");
+      if (v1Raw) {
+        try { setCandidateName(JSON.parse(v1Raw).name ?? ""); } catch { /* ignore */ }
+      }
+
+      // 2. 换回原角色
       const v1RolesRaw = localStorage.getItem("suggested_roles");
       if (v1RolesRaw) {
         const originalRoles: RoleSuggestion[] = JSON.parse(v1RolesRaw);
